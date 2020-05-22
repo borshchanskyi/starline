@@ -43,7 +43,7 @@ class StarlineApi(BaseApi):
                 device_id = str(device_data["device_id"])
                 if device_id not in self._devices:
                     self._devices[device_id] = StarlineDevice()
-                self._devices[device_id].update(device_data, self.get_odb_info(device_id))
+                self._devices[device_id].update(device_data)
 
         self._call_listeners()
 
@@ -68,25 +68,25 @@ class StarlineApi(BaseApi):
                 return response["obd_errors"]
         return None
 
-    def get_odb_info(self, device_id) -> Optional[Dict[str, Any]]:
-        """Get ODB Information"""
-        url = "https://developer.starline.ru/json/v1/device/{}/obd_params".format(device_id)
-        headers = {"Cookie": "slnet=" + self._slnet_token}
-        response = self._get(url, headers=headers)
-        if response is None:
-            return None
-
-        code = int(response["code"])
-        if code == 200:
-            _LOGGER.debug(response)
-            data = {}
-            data.update({"fuel": response["obd_params"]["fuel"]})
-            data.update({"errors": response["obd_params"]["errors"]})
-            data.update({"mileage": response["obd_params"]["mileage"]})
-            data["errors"]["errors"] = self.get_odb_errors(device_id)
-            _LOGGER.debug(data)
-            return data
-        return None
+    def update_obd(self) -> None:
+        """Update OBD Information"""
+        if self._available:
+            url = "https://developer.starline.ru/json/v1/device/{}/obd_params"
+            headers = {"Cookie": "slnet=" + self._slnet_token}
+            for device_id in self._devices:
+                response = self._get(url.format(device_id), headers=headers)
+                if response:
+                    _LOGGER.debug(response)
+                    code = int(response["code"])
+                    if code == 200:
+                        data = {}
+                        data.update({"fuel": response["obd_params"]["fuel"]})
+                        data.update({"errors": response["obd_params"]["errors"]})
+                        data.update({"mileage": response["obd_params"]["mileage"]})
+                        data["errors"]["errors"] = self.get_odb_errors(device_id) \
+                            if data["errors"]["val"] > 0 else []
+                        _LOGGER.debug(data)
+                        self._devices[device_id].update_obd(data)
 
     def get_user_info(self) -> Optional[List[Dict[str, Any]]]:
         """Get user information."""
